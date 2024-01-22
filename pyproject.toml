@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=61.0","rawpy","exifread", 
-            "astropy", "astrometry", "photutils"]
+            "astropy", "astrometry", "photutils", "rawpy", "exifread"]
 
 build-backend = "setuptools.build_meta"
 
