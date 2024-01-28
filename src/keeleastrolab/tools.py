@@ -131,9 +131,9 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
     if wcs.has_celestial:
         ax = myWCSAxes(fig, [0.1,0.1,0.8,0.8], wcs=wcs)
         img = ax.imshow(data,
-            vmin=np.percentile(data,90),
-            vmax=np.percentile(data,99.9),
-            origin='lower',cmap='Greens')
+            vmin=np.percentile(data,pmin),
+            vmax=np.percentile(data,pmax),
+            origin='lower',cmap=cmap)
         lon = ax.coords[0]
         lat = ax.coords[1]
         lon.set_ticks_position('lr')
@@ -147,9 +147,9 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
         fig.add_axes(ax);  # axes have to be explicitly added to the figure
     else:
         plt.imshow(data,
-                vmin=np.percentile(data,90),
-                vmax=np.percentile(data,99.9),
-                origin='lower',cmap='Greens')
+                vmin=np.percentile(data,pmin),
+                vmax=np.percentile(data,pmax),
+                origin='lower',cmap=cmap)
         plt.xlabel('Column')
         plt.ylabel('Row')
         fig.tight_layout()
