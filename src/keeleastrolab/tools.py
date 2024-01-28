@@ -125,7 +125,7 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
         return f': {data:6.0f}'
     matplotlib.artist.Artist.format_cursor_data=format_cursor_data
 
-    data,hdr = fits.getdata('IMG_0004_2.fits',header=True)
+    data,hdr = fits.getdata(fitsfile,header=True)
     wcs = WCS(hdr)
     fig = plt.figure(figsize=(9,6))
     ax = myWCSAxes(fig, [0.1,0.1,0.8,0.8], wcs=wcs)
@@ -143,7 +143,7 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
     ax.set_xlabel('Dec')
     ax.set_ylabel('RA')
     fig.tight_layout()
-    fig.add_axes(ax);  # note that the axes have to be explicitly added to the figure
+    fig.add_axes(ax);  # axes have to be explicitly added to the figure
     return fig
 
 
