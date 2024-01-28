@@ -110,7 +110,8 @@ def list_camera_database(return_dict=False):
                 t += f'{row["XResolution"]:>11} {row["YResolution"]:>11}\n'
             return t
 
-def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
+def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', 
+                  swap_axes = None, figsize=(9,6)):
     class myWCSAxes(WCSAxes):
         def _display_world_coords(self, x, y):
             if not self._drawn:
@@ -136,13 +137,26 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
             origin='lower',cmap=cmap)
         lon = ax.coords[0]
         lat = ax.coords[1]
-        lon.set_ticks_position('lr')
-        lon.set_ticklabel_position('lr')
-        lat.set_ticks_position('tb')
-        lat.set_ticklabel_position('tb')
+        if swap_axes is None:
+            pc = wcs.pixel_scale_matrix
+            _swap_axes = np.hypot(pc[0,0],pc[1,1]) < np.hypot(pc[1,0],pc[0,1])
+        else:
+            _swap_axes = swap_axes
+        if _swap_axes:
+            lon.set_ticks_position('lr')
+            lon.set_ticklabel_position('lr')
+            lat.set_ticks_position('tb')
+            lat.set_ticklabel_position('tb')
+            ax.set_xlabel('Dec')
+            ax.set_ylabel('RA')
+        else:
+            lat.set_ticks_position('lr')
+            lat.set_ticklabel_position('lr')
+            lon.set_ticks_position('tb')
+            lon.set_ticklabel_position('tb')
+            ax.set_xlabel('RA')
+            ax.set_ylabel('Dec')
         ax.grid()
-        ax.set_xlabel('Dec')
-        ax.set_ylabel('RA')
         fig.tight_layout()
         fig.add_axes(ax);  # axes have to be explicitly added to the figure
     else:
@@ -154,6 +168,3 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
         plt.ylabel('Row')
         fig.tight_layout()
     return fig
-
-
-
