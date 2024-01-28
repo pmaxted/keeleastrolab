@@ -125,25 +125,34 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
         return f': {data:6.0f}'
     matplotlib.artist.Artist.format_cursor_data=format_cursor_data
 
+    fig = plt.figure(figsize=(9,6))
     data,hdr = fits.getdata(fitsfile,header=True)
     wcs = WCS(hdr)
-    fig = plt.figure(figsize=(9,6))
-    ax = myWCSAxes(fig, [0.1,0.1,0.8,0.8], wcs=wcs)
-    img = ax.imshow(data,
-          vmin=np.percentile(data,90),
-          vmax=np.percentile(data,99.9),
-          origin='lower',cmap='Greens')
-    lon = ax.coords[0]
-    lat = ax.coords[1]
-    lon.set_ticks_position('lr')
-    lon.set_ticklabel_position('lr')
-    lat.set_ticks_position('tb')
-    lat.set_ticklabel_position('tb')
-    ax.grid()
-    ax.set_xlabel('Dec')
-    ax.set_ylabel('RA')
-    fig.tight_layout()
-    fig.add_axes(ax);  # axes have to be explicitly added to the figure
+    if wcs.has_celestial:
+        ax = myWCSAxes(fig, [0.1,0.1,0.8,0.8], wcs=wcs)
+        img = ax.imshow(data,
+            vmin=np.percentile(data,90),
+            vmax=np.percentile(data,99.9),
+            origin='lower',cmap='Greens')
+        lon = ax.coords[0]
+        lat = ax.coords[1]
+        lon.set_ticks_position('lr')
+        lon.set_ticklabel_position('lr')
+        lat.set_ticks_position('tb')
+        lat.set_ticklabel_position('tb')
+        ax.grid()
+        ax.set_xlabel('Dec')
+        ax.set_ylabel('RA')
+        fig.tight_layout()
+        fig.add_axes(ax);  # axes have to be explicitly added to the figure
+    else:
+        ax = plt.imshow(data,
+                vmin=np.percentile(data,90),
+                vmax=np.percentile(data,99.9),
+                origin='lower',cmap='Greens')
+        ax.set_xlabel('Column')
+        ax.set_ylabel('Row')
+        fig.tight_layout()
     return fig
 
 
