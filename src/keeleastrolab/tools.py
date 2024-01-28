@@ -146,12 +146,12 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
         fig.tight_layout()
         fig.add_axes(ax);  # axes have to be explicitly added to the figure
     else:
-        ax = plt.imshow(data,
+        plt.imshow(data,
                 vmin=np.percentile(data,90),
                 vmax=np.percentile(data,99.9),
                 origin='lower',cmap='Greens')
-        ax.set_xlabel('Column')
-        ax.set_ylabel('Row')
+        plt.xlabel('Column')
+        plt.ylabel('Row')
         fig.tight_layout()
     return fig
 
