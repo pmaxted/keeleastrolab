@@ -28,7 +28,7 @@ import csv
 
 __all__ = ['raw2fits']
 
-def raw2fits(file, wcs=True, channel=None, N=1, verbose=1,  
+def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,  
              overwrite=False, extension='fits',
              threshold=5, fwhm=4,
              site='Keele Observatory', elev=208, 
@@ -43,21 +43,14 @@ def raw2fits(file, wcs=True, channel=None, N=1, verbose=1,
             return float(split[0])/float(split[1])
 
     data,exif = tools.read_raw(file, channel)
-    # Convert to float
-    data = data.astype(float)
     if verbose > 2: print(f'\nRead file {file}')
 
     if N > 1:
         if verbose > 2: print(f'  Binning data {N}x{N}')
         s = data.shape
-        if channel is None:
-            x = data[0:s[0]//N*N,0:s[1]//N*N,:] # Trim excess pixels
-            s = x.shape
-            y = x.reshape(s[0]//N, N, s[1]//N, N,s[2])
-        else:
-            x = data[0:s[0]//N*N,0:s[1]//N*N] # Trim excess pixels
-            s = x.shape
-            y = x.reshape(s[0]//N, N, s[1]//N, N)
+        x = data[0:s[0]//N*N,0:s[1]//N*N] # Trim excess pixels
+        s = x.shape
+        y = x.reshape(s[0]//N, N, s[1]//N, N)
         del x
         data = y.sum(axis=(1, 3))
         del y
@@ -71,20 +64,12 @@ def raw2fits(file, wcs=True, channel=None, N=1, verbose=1,
             s = data.shape
             print(f'  Input image size = {s[0]} x {s[1]} pixels')
 
-    if channel is None:
-        if verbose > 2:
-            print('  Writing all channels to multiple extension format file')
-        hdul = fits.HDUList(fits.PrimaryHDU())
-        hdr = hdul[0].header
-        for i in range(data.shape[-1]):
-            hdul.append(fits.ImageHDU(data[:,:,i],name=f'CHANNEL{i}'))
-    else:
-        if verbose > 2:
-            print(f'  Writing channel {channel} to primary header data unit')
-        hdu = fits.PrimaryHDU(data)
-        hdul = fits.HDUList(hdu)
-        hdr = hdul[0].header
-        hdr['CHANNEL'] = channel,'Channel number (0,1,2)'
+    if verbose > 2:
+        print(f'  Writing channel {channel} to primary header data unit')
+    hdu = fits.PrimaryHDU(data)
+    hdul = fits.HDUList(hdu)
+    hdr = hdul[0].header
+    hdr['CHANNEL'] = channel,'Channel (R,G,B)'
 
     hdr['SITENAME'] = site
     hdr['SITEELEV'] = elev
@@ -206,12 +191,8 @@ def raw2fits(file, wcs=True, channel=None, N=1, verbose=1,
         if verbose > 2:
             print(f'  Missing "Image Make" or "Image Model" EXIF tag')
 
-    if channel is None:
-        med = np.median(data[:,:,1])
-        medabsdev = np.median(np.abs(data[:,:,1]-med))
-    else:
-        med = np.median(data)
-        medabsdev = np.median(np.abs(data-med))
+    med = np.median(data)
+    medabsdev = np.median(np.abs(data-med))
 
     if verbose == 2:
         txt += f' {np.mean(data):8.1f} {np.std(data):8.1f} {med:6.0f}'
@@ -231,11 +212,7 @@ def raw2fits(file, wcs=True, channel=None, N=1, verbose=1,
     else:
         wim,him = None,None
 
-    if wcs and channel is None:
-        if verbose > 2:
-            print('  WCS solution not attempted - not implemented for'
-                  ' multi-channel data.')
-    elif wcs and wim is None:
+    if wcs and wim is None:
         if verbose > 2:
             print('  WCS solution not attempted - could not determine image'
                   ' size.')
@@ -361,14 +338,7 @@ def main():
         epilog = textwrap.dedent('''\
 
         For each raw file given on the command line, create a FITS file
-        containing the data from each channel into a separate image extension,
-        or a FITS file containing a single primary image if the --channel
-        option is used.
-
-        The selected channel number is added to the primary FITS header with
-        the keyword "CHANNEL" if --channel is selected.
-
-        N.B. the first channel number is 0, not 1.
+        containing the data from one channel in the primary header data unit.
 
         The image meta-data provided in the EXIF tags in the raw file are
         converted to FITS header keyword values as shown in the table below.
@@ -389,8 +359,7 @@ def main():
         If the --wcs option is used then the photutils routine DAOStarFinder
         is used to detect stars in the image and their positions are passed to
         the astrometry.net plate solver running locally to find the parameters
-        of a WCS transformation that are added to FITS header. Currently only
-        implemented if a single channel is selected for output.
+        of a WCS transformation that are added to FITS header. 
 
         N.B. this is slow. Providing an accurate position hint and reducing
         the search radius, or reducing the number of detected stars can both
@@ -424,9 +393,6 @@ def main():
              2   One-line summary per file, 132 character width.
              3   Full details of image processing steps and WCS calibration.
 
-        If all channels are converted to FITS format then the image statistics
-        printed in the one-line summary correspond to channel 1. 
-
         If --wcs is specified and the astrometric calibration is succesful and
         --verbose 1 or 2 then the final three columns printed to standard
         output will show the RA and declination of the central pixel followed
@@ -450,28 +416,26 @@ def main():
         pixel values are also printed  - mean, median, standard deviation,
         median absolute deviation from the image median (MedAbsDev).
 
+        Digital camera images typically have two green "G" channels. These are
+        added together  to form a single image for output to the FITS file.
+
         '''))
 
     parser.add_argument('files', nargs='*', type=str, 
         help='Raw files to be converted to FITS format')
 
-    parser.add_argument('-c', '--channel', default=None, type=int,
-        choices = [None,0,1,2],
-        help='''
-        Channel to store in FITS file (default: all)
-        ''')
+    parser.add_argument('-c', '--channel', default='G', type=str,
+        choices = ['R','G','B'],
+        help='Channel to store in FITS file (default: %(default)s)')
 
     parser.add_argument('-x', '--extension', default='.fits', type=str,
-        help='''
-        New filename extension 
-        (default: %(default)s)
-        ''')
+        help='New filename extension (default: %(default)s)')
 
     parser.add_argument('-o', '--overwrite', action='store_const',
                         dest='overwrite', const=True, default=False,
         help='Overwrite existing FITS files')
 
-    parser.add_argument('-b', '--binning', default=2, type=int, dest='N',
+    parser.add_argument('-b', '--binning', default=1, type=int, dest='N',
         help='''
         Combine output pixels in NxN blocks
         (default: %(default)d)
