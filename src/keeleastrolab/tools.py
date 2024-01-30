@@ -276,8 +276,8 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
     r = results_table[results_table['id'] == aperture_id]
     h = results_table.meta
     xy = np.array([r['x'],r['y']]).T
-    aperture = CircularAperture(xy, h['radius'])
-    annulus = CircularAnnulus(xy, r_in=h['r_inner'], r_out=h['r_outer']) 
+    aperture = CircularAperture(xy, h['radius'])[0]
+    annulus = CircularAnnulus(xy, r_in=h['r_inner'], r_out=h['r_outer'])[0]
 
     if figsize is None:
         if vertical:
@@ -298,7 +298,7 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
                          origin='lower',cmap=cmap)
     aperture.plot(ax=axes[0],color='r', lw=2)
     annulus.plot(ax=axes[0],color='b', lw=2)
-    bb = annulus.bbox[0]
+    bb = annulus.bbox
     axes[0].set_xlim(bb.ixmin-margin, bb.ixmax+margin)
     axes[0].set_ylim(bb.iymin-margin, bb.iymax+margin)
     axes[0].set_xlabel('Column [pixels]')
