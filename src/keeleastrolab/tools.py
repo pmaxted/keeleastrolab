@@ -249,6 +249,16 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
     """ 
     Diagnostic plot for an aperture used for aperture_photometry 
 
+    The first panel shows an image of the data together with the aperture used
+    to measure the source flux (red) and the annulus used to measure the local
+    background level (blue). Any pixels excluded from the calculation of the
+    local background level are marked with a red cross. 
+
+    The second panel shows a histogram of the pixel data values used to
+    measure the local background level. The mean value is indicated by a
+    vertical line and the limits used to reject pixels from the calculation
+    are shown with dashed lines. 
+
     :param aperture_id: aperture to plot (from id column of results_table)
 
     :param data: image data array used in aperture_photometry
@@ -323,7 +333,6 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
         axes[1].axvline(an_mean,c='r',label='Mean')
         axes[1].axvline(an_med+h['bgrejtol']*an_mad,c='r',ls='--',label='Limits')
         axes[1].axvline(an_med-h['bgrejtol']*an_mad,c='r',ls='--')
-        axes[1].legend()
         axes[1].set_xlabel('Data value')
         axes[1].set_ylabel('N')
 
