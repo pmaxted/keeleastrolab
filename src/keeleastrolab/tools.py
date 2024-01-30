@@ -31,7 +31,7 @@ __all__ = ['aperture_photometry', 'inspect_aperture', 'inspect_image',
 
 def aperture_photometry(data, x, y, error=None, box_size=11, 
                         radius=4, r_inner=6, r_outer=12, 
-                        bkg_reject_tol=4):
+                        bkg_reject_tol=5):
     """
     Synthetic aperture photometry at positions specified on an image.
 
@@ -291,9 +291,9 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
 
     if figsize is None:
         if vertical:
-            fs = (4,8)
+            fs = (3,6)
         else:
-            fs = (9,4)
+            fs = (7,3)
     else:
         fs = figsize
 
@@ -328,14 +328,18 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
         data_an_bad = (abs(data - an_med) > (h['bgrejtol']*an_mad)) & dm
         axes[0].plot(xx[data_an_bad],yy[data_an_bad],'rx')
         use_mask = dm & ~data_an_bad
-        hist = axes[1].hist(data[use_mask])
+        hist = axes[1].hist(data[dm])
         an_mean = np.mean(data[use_mask])
+        xlo = an_med-h['bgrejtol']*an_mad
+        xhi = an_med+h['bgrejtol']*an_mad
+        axes[1].set_xlim(xlo-0.5*(xhi-xlo), xhi+0.5*(xhi-xlo))
         axes[1].axvline(an_mean,c='r',label='Mean')
-        axes[1].axvline(an_med+h['bgrejtol']*an_mad,c='r',ls='--',label='Limits')
-        axes[1].axvline(an_med-h['bgrejtol']*an_mad,c='r',ls='--')
+        axes[1].axvline(xlo,c='r',ls='--',label='Limits')
+        axes[1].axvline(xhi,c='r',ls='--')
         axes[1].set_xlabel('Data value')
         axes[1].set_ylabel('N')
 
+    fig.tight_layout()
     return fig
     
 def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', 
