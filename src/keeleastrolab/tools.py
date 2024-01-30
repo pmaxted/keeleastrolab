@@ -306,7 +306,7 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
     axes[0].set_title(title)
     
     # Find and plot pixels rejected from sky aperture
-    if np.sum(data) != h['datasum']:
+    if abs(np.sum(data) - h['datasum']) > 0:
         warn('Data for display differs from data used for aperture_photometry')
     else:
         xx,yy = np.meshgrid(np.arange(data.shape[1]),np.arange(data.shape[0]))
@@ -315,7 +315,7 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
         an_med = np.median(data[dm])     # median value in annulus
         an_mad = np.median(np.abs(data[dm]-an_med))  # m.a.d. in annulus
         # Mask for outliers, same size as data 
-        data_an_bad = (abs(data - an_med) > (bkg_reject_tol*an_mad)) & dm
+        data_an_bad = (abs(data - an_med) > (h['bgrejtol']*an_mad)) & dm
         axes[0].plot(xx[data_an_bad],yy[data_an_bad],'rx')
         use_mask = dm & ~data_an_bad
         hist = axes[1].hist(data[use_mask])
