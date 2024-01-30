@@ -24,7 +24,7 @@ from photutils.centroids import centroid_sources
 from photutils.aperture import CircularAperture, CircularAnnulus
 from photutils.aperture import aperture_photometry as AperturePhotometry
 from astropy.table import Table
-import warnings
+from warnings import warn
 
 __all__ = ['aperture_photometry', 'inspect_aperture', 'inspect_image',
            'read_raw']
@@ -243,7 +243,9 @@ def list_camera_database(return_dict=False):
                 t += f'{row["XResolution"]:>11} {row["YResolution"]:>11}\n'
             return t
 
-def inspect_aperture(aperture_id, data, results_table, title=None):
+def inspect_aperture(aperture_id, data, results_table, figsize=None, 
+                     vertical=True,  margin=3, 
+                     pmin=50, pmax=99, cmap='Greens', title=None):
     """ 
     Diagnostic plot for an aperture used for aperture_photometry 
 
@@ -252,6 +254,18 @@ def inspect_aperture(aperture_id, data, results_table, title=None):
     :param data: image data array used in aperture_photometry
 
     :param results_table: output astropy.table from aperture_photometry
+
+    :param figsize: figure size for matplot Figure object
+
+    :param vertical: plots one above the other (True) or side-by-side (False) 
+
+    :param margin: margin around annulus in pixels for image display
+
+    :param pmin: percentile data value for minimum of image display scaling
+
+    :param pmax: percentile data value for maximum of image display scaling
+
+    :param cmap: colour map name for image display
 
     :title: optional plot title
 
@@ -264,7 +278,56 @@ def inspect_aperture(aperture_id, data, results_table, title=None):
     xy = np.array([r['x'],r['y']]).T
     aperture = CircularAperture(xy, h['radius'])
     annulus = CircularAnnulus(xy, r_in=h['r_inner'], r_out=h['r_outer']) 
-    return h
+
+    if figsize is None:
+        if vertical:
+            fs = (4,8)
+        else:
+            fs = (9,4)
+    else:
+        fs = figsize
+
+    if vertical:
+        fig,axes = plt.subplots(nrows=2, figsize=fs)
+    else:
+        fig,axes = plt.subplots(ncols=2, figsize=fs)
+
+    img = axes[0].imshow(data,
+                         vmin=np.percentile(data,pmin),
+                         vmax=np.percentile(data,pmax),
+                         origin='lower',cmap=cmap)
+    aperture.plot(ax=axes[0],color='r', lw=2)
+    annulus.plot(ax=axes[0],color='b', lw=2)
+    bb = annulus.bbox[0]
+    axes[0].set_xlim(bb.ixmin-margin, bb.ixmax+margin)
+    axes[0].set_ylim(bb.iymin-margin, bb.iymax+margin)
+    axes[0].set_xlabel('Column [pixels]')
+    axes[0].set_ylabel('Row [pixels]')
+    axes[0].set_title(title)
+    
+    # Find and plot pixels rejected from sky aperture
+    if np.sum(data) != h['datasum']:
+        warn('Data for display differs from data used for aperture_photometry')
+    else:
+        xx,yy = np.meshgrid(np.arange(data.shape[1]),np.arange(data.shape[0]))
+        am = annulus.to_mask(method='center') # ApertureMask object
+        dm = am.to_image(data.shape) > 0 # aperture bool mask, same size as data
+        an_med = np.median(data[dm])     # median value in annulus
+        an_mad = np.median(np.abs(data[dm]-an_med))  # m.a.d. in annulus
+        # Mask for outliers, same size as data 
+        data_an_bad = (abs(data - an_med) > (bkg_reject_tol*an_mad)) & dm
+        axes[0].plot(xx[data_an_bad],yy[data_an_bad],'rx')
+        use_mask = dm & ~data_an_bad
+        hist = axes[1].hist(data[use_mask])
+        an_mean = np.mean(data[use_mask])
+        axes[1].axvline(an_mean,c='r',label='Mean')
+        axes[1].axvline(an_med+h['bgrejtol']*an_mad,c='r',ls='--',label='Limits')
+        axes[1].axvline(an_med-h['bgrejtol']*an_mad,c='r',ls='--')
+        axes[1].legend()
+        axes[1].set_xlabel('Data value')
+        axes[1].set_ylabel('N')
+
+    return fig
     
 def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', 
                   swap_axes = None, figsize=(9,6)):
