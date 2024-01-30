@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "keeleastrolab"
-version = "0.0.3"
+version = "0.0.4"
 authors = [
   { name="Pierre Maxted", email="p.maxted@keele.ac.uk" },
 ]
@@ -18,7 +18,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = ["rawpy","exifread", "astropy", "astrometry",
-    "photutils", "rawpy", "exifread"]
+    "photutils", "rawpy", "exifread", "scipy > 1.7.0", "numpy > 1.26.0"]
 
 [project.urls]
 Homepage = "https://github.com/pmaxted/keeleastrolab"

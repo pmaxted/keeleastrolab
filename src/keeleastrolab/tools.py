@@ -14,14 +14,142 @@ import errno
 import os
 import csv
 import numpy as np
-
+from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
 from astropy.visualization.wcsaxes import WCSAxes
 import matplotlib.pyplot as plt
 import matplotlib
 from astropy.io import fits
+from photutils.centroids import centroid_sources
+import photutils.aperture as ap
+from astropy.table import Table
 
-__all__ = [ 'read_raw','pixel_size_from_exif','inspect_image']
+__all__ = [ 'aperture_photometry','read_raw','inspect_image']
+
+def aperture_photometry(data, x, y, error=None, box_size=11, 
+                        radius=4, r_inner=6, r_outer=12, 
+                        bkg_reject_tol=4):
+    """
+    Synthetic aperture photometry at positions specified on an image.
+
+    Uses a circular aperture photometry to compute counts above the local
+    background for point sources in an image at approximate positions (x,y)
+    in pixel coordinates with origin (0,0).
+
+     The position of the apertures is computed from the centroid of a box with
+    size (box_size x box_size) centred at each of the input (x,y) positions.
+    Set box_size < 3 to disable this option. N.B. must be an odd integer.
+
+     The local background for each point source in computed from the mean
+    value in an annulus centred at the same position as the aperture. The mean
+    is calculated after rejecting points more than bkg_reject_tol*m.a.d. from
+    the median value in the annulas,  where m.a.d. is the median absolute
+    deviation of the pixels in the annulus. 
+
+     The standard error on the flux measurement is computed if the standard
+     error on each input pixel is provided in the input array "error". This
+     includes the uncertainty on the local background level computed from the
+     standard error on the mean for non-rejected pixels in each annulus.
+
+    :param data: image with point sources
+
+    :param x: array of point source x coordinates in pixels
+    
+    :param y: array of point source y coordinates in pixels
+
+    :param error: image standard error values - same size as data.
+
+    :param box_size: box size for computing point source positions.
+
+    :param radius: aperture radius in pixels.
+
+    :param r_inner: inner radius of annulus for background estimate in pixels.
+
+    :param r_outer: outer radius of annulus for background estimate in pixels.
+
+    :bkg_reject_tol: Tolerance to reject pixels for local background estimate.
+
+    :returns: An astropy.table table of the photometry and other information.
+
+    :Example:
+
+     >>> from keeleastrolab.tools import aperture_photometry
+     >>> phot_table = aperture_photometry(data, [123.1, 234.5],[76.2, 99.3])
+    
+    """
+    if box_size < 3:
+        xcen = x
+        ycen = y
+    else:
+        xcen, ycen = centroid_sources(data, x, y, box_size=box_size)
+
+    positions = np.transpose((xcen,ycen))
+
+    apertures = ap.CircularAperture(positions, r=radius)
+    sky_annuli = ap.CircularAnnulus(positions, r_in=r_inner, r_out=r_outer)
+
+    peak = []
+    bkg_med = []
+    bkg_mad = []
+    bkg_mean = []
+    bkg_sem = []
+    bkg_n = []
+    for ap,an in zip(apertures, sky_annuli):
+        peak.append(data[ap.to_mask().to_image(data.shape) > 0].max())
+        # Used method = 'center' so mask values are 0 or 1 so we can avoid
+        # complications of using weighted statistics.
+        am = an.to_mask(method='center') # ApertureMask object
+        dm = am.to_image(data.shape) > 0 # aperture bool mask, same size as data
+        an_med = np.median(data[dm])     # median value in annulus
+        an_mad = np.median(np.abs(data[dm]-an_med))  # m.a.d. in annulus
+        # Mask for outliers, same size as data 
+        data_an_bad = (abs(data - an_med) > (bkg_reject_tol*an_mad)) & dm
+        # Mask for values for local background estimate, same size as # data
+        use_mask = dm & ~data_an_bad
+        n = np.sum(use_mask)
+        an_mean = np.mean(data[use_mask])
+        if n > 1:
+            an_sem = np.std(data[use_mask])/np.sqrt(np.sum(use_mask)-1)
+        else:
+            an_sem = np.nan
+        bkg_med.append(an_med)
+        bkg_mad.append(an_mad)
+        bkg_mean.append(an_mean)
+        bkg_sem.append(an_sem)
+        bkg_n.append(n)
+
+    d = [x,y,peak,bkg_mean,bkg_sem,bkg_n,bkg_med,bkg_mad]
+    n = ['x','y','peak','bkg_mean','bkg_sem','bkg_n','bkg_med','bkg_mad']
+    results = Table(d,names=n)
+    phot_table = ap.aperture_photometry(data, apertures, error=error)
+    results['aperture_sum'] = phot_table['aperture_sum']
+    if error is not None:
+        results['aperture_sum_err'] = phot_table['aperture_sum_err']
+
+    apareas = apertures.area_overlap(data)
+    results['bkg_total'] = results['bkg_mean'] * apareas
+    flux = phot_table['aperture_sum'] - results['bkg_total']
+    results.add_column(flux, index=3,name='flux')
+    if error is not None:
+        bkg_total_err = results['bkg_sem'] * apareas
+        results['bkg_total_err'] = bkg_total_err
+        flux_err = np.hypot(phot_table['aperture_sum_err'],bkg_total_err)
+        results.add_column(flux_err, index=4,name='flux_err')
+        for col in ['flux_err', 'bkg_total_err','aperture_sum_err']:
+            results[col].info.format = '%.2f'
+
+    for col in ['x','y','flux','peak','bkg_mean','bkg_sem','bkg_total',
+                'aperture_sum']:
+        results[col].info.format = '%.2f'
+
+    # Add meta data to table for use with inspect_aperture
+    results.meta['box_size'] = box_size
+    results.meta['r_inner'] = r_inner
+    results.meta['r_outer'] = r_outer
+    results.meta['bgrejtol'] = bkg_reject_tol
+    results.meta['datasum'] = np.sum(data)   # used as a checksum
+
+    return results
 
 def read_raw(file, channel='G'):
     """
@@ -110,7 +238,8 @@ def list_camera_database(return_dict=False):
                 t += f'{row["XResolution"]:>11} {row["YResolution"]:>11}\n'
             return t
 
-def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
+def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', 
+                  swap_axes = None, figsize=(9,6)):
     class myWCSAxes(WCSAxes):
         def _display_world_coords(self, x, y):
             if not self._drawn:
@@ -118,11 +247,14 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
             pixel = np.array([x, y])
             coords = self._all_coords[self._display_coords_index]
             world = coords._transform.transform(np.array([pixel]))[0]
-            rastr = f"{world[0]/15:02.0f}h {60*(world[0]/15 % 1):02.0f}m"
-            destr = f"{world[1]:+02.0f}° {60*(world[1] % 1):02.0f}'"
-            return f"{rastr}, {destr} ({x:6.1f}, {y:6.1f})"
+            c=SkyCoord(world[0],world[1],unit='degree') 
+            r=c.ra.to_string(unit='hour',fields=2,pad=True,format='unicode')
+            d=c.dec.to_string(fields=2,pad=True,alwayssign=True,format='unicode')
+            return f"{r}, {d} ({x:6.1f}, {y:6.1f})"
+
     def format_cursor_data(self,data):
         return f': {data:6.0f}'
+
     matplotlib.artist.Artist.format_cursor_data=format_cursor_data
 
     fig = plt.figure(figsize=(9,6))
@@ -136,13 +268,26 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
             origin='lower',cmap=cmap)
         lon = ax.coords[0]
         lat = ax.coords[1]
-        lon.set_ticks_position('lr')
-        lon.set_ticklabel_position('lr')
-        lat.set_ticks_position('tb')
-        lat.set_ticklabel_position('tb')
+        if swap_axes is None:
+            pc = wcs.pixel_scale_matrix
+            _swap_axes = np.hypot(pc[0,0],pc[1,1]) < np.hypot(pc[1,0],pc[0,1])
+        else:
+            _swap_axes = swap_axes
+        if _swap_axes:
+            lon.set_ticks_position('lr')
+            lon.set_ticklabel_position('lr')
+            lat.set_ticks_position('tb')
+            lat.set_ticklabel_position('tb')
+            ax.set_xlabel('Dec')
+            ax.set_ylabel('RA')
+        else:
+            lat.set_ticks_position('lr')
+            lat.set_ticklabel_position('lr')
+            lon.set_ticks_position('tb')
+            lon.set_ticklabel_position('tb')
+            ax.set_xlabel('RA')
+            ax.set_ylabel('Dec')
         ax.grid()
-        ax.set_xlabel('Dec')
-        ax.set_ylabel('RA')
         fig.tight_layout()
         fig.add_axes(ax);  # axes have to be explicitly added to the figure
     else:
@@ -154,6 +299,3 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', figsize=(9,6)):
         plt.ylabel('Row')
         fig.tight_layout()
     return fig
-
-
-

@@ -323,6 +323,8 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
 
     fitsfile = os.path.splitext(file)[0]+extension
 
+    for hdu in hdul:
+        hdu.add_checksum()
     hdul.writeto(fitsfile,overwrite=overwrite)
 
     if verbose in [1,2]:
