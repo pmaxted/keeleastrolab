@@ -291,9 +291,9 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
 
     if figsize is None:
         if vertical:
-            fs = (4,8)
+            fs = (3,6)
         else:
-            fs = (9,4)
+            fs = (7,3)
     else:
         fs = figsize
 
@@ -336,6 +336,7 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
         axes[1].set_xlabel('Data value')
         axes[1].set_ylabel('N')
 
+    fig.tight_layout()
     return fig
     
 def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', 
