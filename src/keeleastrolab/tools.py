@@ -244,7 +244,7 @@ def list_camera_database(return_dict=False):
             return t
 
 def inspect_aperture(aperture_id, data, results_table, figsize=None, 
-                     vertical=True,  margin=3, 
+                     vertical=False,  margin=3, 
                      pmin=50, pmax=99, cmap='Greens', title=None):
     """ 
     Diagnostic plot for an aperture used for aperture_photometry 
