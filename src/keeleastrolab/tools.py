@@ -21,7 +21,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 from astropy.io import fits
 from photutils.centroids import centroid_sources
-import photutils.aperture as ap
+from photutils.aperture import CircularAperture, CircularAnnulus
+from photutils.aperture import aperture_photometry as AperturePhotometry
 from astropy.table import Table
 
 __all__ = [ 'aperture_photometry','read_raw','inspect_image']
@@ -85,8 +86,8 @@ def aperture_photometry(data, x, y, error=None, box_size=11,
 
     positions = np.transpose((xcen,ycen))
 
-    apertures = ap.CircularAperture(positions, r=radius)
-    sky_annuli = ap.CircularAnnulus(positions, r_in=r_inner, r_out=r_outer)
+    apertures = CircularAperture(positions, r=radius)
+    sky_annuli = CircularAnnulus(positions, r_in=r_inner, r_out=r_outer)
 
     peak = []
     bkg_med = []
@@ -121,7 +122,7 @@ def aperture_photometry(data, x, y, error=None, box_size=11,
     d = [x,y,peak,bkg_mean,bkg_sem,bkg_n,bkg_med,bkg_mad]
     n = ['x','y','peak','bkg_mean','bkg_sem','bkg_n','bkg_med','bkg_mad']
     results = Table(d,names=n)
-    phot_table = ap.aperture_photometry(data, apertures, error=error)
+    phot_table = AperturePhotometry(data, apertures, error=error)
     results['aperture_sum'] = phot_table['aperture_sum']
     if error is not None:
         results['aperture_sum_err'] = phot_table['aperture_sum_err']
