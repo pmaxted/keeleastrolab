@@ -24,8 +24,10 @@ from photutils.centroids import centroid_sources
 from photutils.aperture import CircularAperture, CircularAnnulus
 from photutils.aperture import aperture_photometry as AperturePhotometry
 from astropy.table import Table
+import warnings
 
-__all__ = [ 'aperture_photometry','read_raw','inspect_image']
+__all__ = ['aperture_photometry', 'inspect_aperture', 'inspect_image',
+           'read_raw']
 
 def aperture_photometry(data, x, y, error=None, box_size=11, 
                         radius=4, r_inner=6, r_outer=12, 
@@ -123,6 +125,7 @@ def aperture_photometry(data, x, y, error=None, box_size=11,
     n = ['x','y','peak','bkg_mean','bkg_sem','bkg_n','bkg_med','bkg_mad']
     results = Table(d,names=n)
     phot_table = AperturePhotometry(data, apertures, error=error)
+    results.add_column(phot_table['id'], name='id', index=0)
     results['aperture_sum'] = phot_table['aperture_sum']
     if error is not None:
         results['aperture_sum_err'] = phot_table['aperture_sum_err']
@@ -145,6 +148,7 @@ def aperture_photometry(data, x, y, error=None, box_size=11,
 
     # Add meta data to table for use with inspect_aperture
     results.meta['box_size'] = box_size
+    results.meta['radius'] = radius
     results.meta['r_inner'] = r_inner
     results.meta['r_outer'] = r_outer
     results.meta['bgrejtol'] = bkg_reject_tol
@@ -239,6 +243,29 @@ def list_camera_database(return_dict=False):
                 t += f'{row["XResolution"]:>11} {row["YResolution"]:>11}\n'
             return t
 
+def inspect_aperture(aperture_id, data, results_table, title=None):
+    """ 
+    Diagnostic plot for an aperture used for aperture_photometry 
+
+    :param aperture_id: aperture to plot (from id column of results_table)
+
+    :param data: image data array used in aperture_photometry
+
+    :param results_table: output astropy.table from aperture_photometry
+
+    :title: optional plot title
+
+    :returns:  matplotlib Figure object.
+
+    """
+
+    r = results[results['id'] == aperture_id]
+    h = results.meta
+    xy = np.array([r['x'],r['y']]).T
+    aperture = CircularAperture(xy, h['radius'])
+    annulus = CircularAnnulus(xy, r_in=h['r_inner'], r_out=h['r_outer']) 
+    return h
+    
 def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', 
                   swap_axes = None, figsize=(9,6)):
     class myWCSAxes(WCSAxes):
