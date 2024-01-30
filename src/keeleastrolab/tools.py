@@ -273,8 +273,8 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
 
     """
 
-    r = results[results['id'] == aperture_id]
-    h = results.meta
+    r = results_table[results_table['id'] == aperture_id]
+    h = results_table.meta
     xy = np.array([r['x'],r['y']]).T
     aperture = CircularAperture(xy, h['radius'])
     annulus = CircularAnnulus(xy, r_in=h['r_inner'], r_out=h['r_outer']) 
