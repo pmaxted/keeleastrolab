@@ -150,10 +150,15 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
     
     d = {'MAKE':'Image Make',
          'MODEL':'Image Model',
-         'LENSNAME':'EXIF LensModel'}
+         'LENSNAME':'EXIF LensModel',
+         'SNUMBODY': 'EXIF BodySerialNumber',
+         'SNUMLENS': 'EXIF LensSerialNumber'}
     for k in d:
         tag = d[k]
-        s = str(exif[tag]).strip()
+        try:
+            s = str(exif[tag]).strip()
+        except KeyError:
+            continue
         if verbose > 2: print(f'  Found "{tag}" : {s}')
         if len(s) > 68:
             hdr[k] = s[:68], tag
@@ -357,6 +362,8 @@ def main():
          "EXIF ISOSpeedRatings"  ISO       
          "EXIF FocalLength"      FOCALLEN  mm
          "EXIF LensModel"        LENSNAME  Truncated to 68 characters
+         "EXIF BodySerialNumber" SNUMBODY  
+         "EXIF LensSerialNumber" SNUMLENS 
 
         If the --wcs option is used then the photutils routine DAOStarFinder
         is used to detect stars in the image and their positions are passed to
