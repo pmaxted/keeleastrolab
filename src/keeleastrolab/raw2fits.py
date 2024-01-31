@@ -18,7 +18,9 @@ import astrometry
 import textwrap
 import sys
 import os
-import contextlib
+import io
+from contextlib import contextmanager
+import tempfile
 from astropy.time import Time
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz
 from photutils.detection import DAOStarFinder
@@ -28,9 +30,41 @@ import csv
 
 __all__ = ['raw2fits']
 
+# From https://eli.thegreenplace.net/2015/redirecting-all-kinds-of-stdout-in-python/
+@contextmanager
+def stderr_redirector(stream):
+    # The original fd stderr points to. Usually 1 on POSIX systems.
+    original_stderr_fd = sys.stderr.fileno()
+
+    def _redirect_stderr(to_fd):
+        """Redirect stderr to the given file descriptor."""
+        # Flush and close sys.stderr - also closes the file descriptor (fd)
+        sys.stderr.close()
+        # Make original_stderr_fd point to the same file as to_fd
+        os.dup2(to_fd, original_stderr_fd)
+        # Create a new sys.stderr that points to the redirected fd
+        sys.stderr = io.TextIOWrapper(os.fdopen(original_stderr_fd, 'wb'))
+
+    # Save a copy of the original stderr fd in saved_stderr_fd
+    saved_stderr_fd = os.dup(original_stderr_fd)
+    try:
+        # Create a temporary file and redirect stderr to it
+        tfile = tempfile.TemporaryFile(mode='w+b')
+        _redirect_stderr(tfile.fileno())
+        # Yield to caller, then redirect stderr back to the saved fd
+        yield
+        _redirect_stderr(saved_stderr_fd)
+        # Copy contents of temporary file to the given stream
+        tfile.flush()
+        tfile.seek(0, io.SEEK_SET)
+        stream.write(tfile.read())
+    finally:
+        tfile.close()
+        os.close(saved_stderr_fd)
+
 def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,  
              overwrite=False, extension='fits',
-             threshold=5, fwhm=4,
+             threshold=10, fwhm=4,
              site='Keele Observatory', elev=208, 
              object_name=None,
              position_hint=None, radius_deg=15):
@@ -222,7 +256,7 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
             print('  WCS solution not attempted - could not determine image'
                   ' size.')
     elif wcs:
-        t = round(med + threshold*medabsdev,1)
+        t = round(threshold*medabsdev,1)
         if verbose > 2:
             print(f'  Running DAOStarFinder(fwhm={fwhm}, threshold={t})')
         daofind = DAOStarFinder(fwhm=fwhm, threshold=t)
@@ -275,13 +309,18 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
                 f' {upper_arcsec_per_pixel=:0.2f}')
 
         xy = np.transpose((sources['xcentroid'], sources['ycentroid']))
-        spar = solution_parameters=astrometry.SolutionParameters(sip_order=4)
+        spar = astrometry.SolutionParameters(
+                logodds_callback=lambda logodds_list: (
+                    astrometry.Action.STOP
+                    if logodds_list[0] > 100.0
+                    else astrometry.Action.CONTINUE),)
         # Suppress printed error messages from astrometry
-        with open(os.devnull, 'w') as devnull:
-            with contextlib.redirect_stderr(devnull):
-                solution = solver.solve(stars=xy,
-                                size_hint=shint, position_hint=phint,
-                                solution_parameters=spar)
+        f = io.BytesIO()
+        with stderr_redirector(f):
+            solution = solver.solve(stars=xy,
+                                    size_hint=shint,
+                                    position_hint=phint,
+                                    solution_parameters=spar)
         if solution.has_match():
             best_match = solution.best_match()
             center_ra_deg = best_match.center_ra_deg
@@ -454,7 +493,7 @@ def main():
         dest='wcs', const=True, default=False,
         help='Attempt to compute WCS parameters for FITS header')
 
-    parser.add_argument('-t', '--threshold', default=5.0, type=float,
+    parser.add_argument('-t', '--threshold', default=10.0, type=float,
         help='''
         Threshold as factor of image MedAbsDev for star detection
         (default: %(default)3.1f)

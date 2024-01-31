@@ -342,7 +342,8 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
     fig.tight_layout()
     return fig
     
-def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens', 
+def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens',
+                  flatfile=None, darkfile=None, 
                   swap_axes = None, figsize=(9,6)):
     class myWCSAxes(WCSAxes):
         def _display_world_coords(self, x, y):
@@ -363,6 +364,15 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens',
 
     fig = plt.figure(figsize=(9,6))
     data,hdr = fits.getdata(fitsfile,header=True)
+
+    if darkfile is not None:
+        dark = fits.getdata(darkfile)
+        data -= dark
+
+    if flatfile is not None:
+        flat = fits.getdata(flatfile)
+        data /= flat
+
     wcs = WCS(hdr)
     if wcs.has_celestial:
         ax = myWCSAxes(fig, [0.1,0.1,0.8,0.8], wcs=wcs)
