@@ -15,7 +15,7 @@ import os
 import csv
 import numpy as np
 from astropy.coordinates import SkyCoord
-from astropy.wcs import WCS
+from astropy.wcs import WCS, FITSFixedWarning
 from astropy.visualization.wcsaxes import WCSAxes
 import matplotlib.pyplot as plt
 import matplotlib
@@ -24,7 +24,7 @@ from photutils.centroids import centroid_sources
 from photutils.aperture import CircularAperture, CircularAnnulus
 from photutils.aperture import aperture_photometry as AperturePhotometry
 from astropy.table import Table
-from warnings import warn
+import warnings 
 
 __all__ = ['aperture_photometry', 'inspect_aperture', 'inspect_image',
            'read_raw']
@@ -50,9 +50,9 @@ def aperture_photometry(data, x, y, error=None, box_size=11,
     deviation of the pixels in the annulus. 
 
      The standard error on the flux measurement is computed if the standard
-     error on each input pixel is provided in the input array "error". This
-     includes the uncertainty on the local background level computed from the
-     standard error on the mean for non-rejected pixels in each annulus.
+    error on each input pixel is provided in the input array "error". This
+    includes the uncertainty on the local background level computed from the
+    standard error on the mean for non-rejected pixels in each annulus.
 
     :param data: image with point sources
 
@@ -73,6 +73,24 @@ def aperture_photometry(data, x, y, error=None, box_size=11,
     :bkg_reject_tol: Tolerance to reject pixels for local background estimate.
 
     :returns: An astropy.table table of the photometry and other information.
+
+    The results table contains the following columns
+
+    - id: aperture number
+    - x: x pixel coordinate at centre of aperture 
+    - y: y pixel coordinate at centre of aperture 
+    - flux: sum of pixel values above local background in aperture
+    - flux_err: standard error estimate for flux
+    - peak: maximum pixel value in the aperture
+    - bkg_mean: mean of the pixel values in annulus after outlier rejection
+    - bkg_sem: standard error estimate for bkg_mean
+    - bkg_n: number of pixels in annulus used to estimate bkg_mean
+    - bkg_med: median of the pixel values in the annulus
+    - bkg_mad: mean absolute deviation of pixel values in the annulus
+    - aperture_sum: sum of pixel values in aperture
+    - aperture_sum_err: standard error estimate for aperture_sum
+    - bkg_total: sum of pixel values in aperture after outlier rejection
+    - bkg_total_err: standard error estimate for bkg_total
 
     :Example:
 
@@ -121,7 +139,7 @@ def aperture_photometry(data, x, y, error=None, box_size=11,
         bkg_sem.append(an_sem)
         bkg_n.append(n)
 
-    d = [x,y,peak,bkg_mean,bkg_sem,bkg_n,bkg_med,bkg_mad]
+    d = [xcen,ycen,peak,bkg_mean,bkg_sem,bkg_n,bkg_med,bkg_mad]
     n = ['x','y','peak','bkg_mean','bkg_sem','bkg_n','bkg_med','bkg_mad']
     results = Table(d,names=n)
     phot_table = AperturePhotometry(data, apertures, error=error)
@@ -317,7 +335,8 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
     
     # Find and plot pixels rejected from sky aperture
     if abs(np.sum(data) - h['datasum']) > 0:
-        warn('Data for display differs from data used for aperture_photometry')
+        warnings.warn(
+                'Data for display differs from data used for aperture_photometry')
     else:
         xx,yy = np.meshgrid(np.arange(data.shape[1]),np.arange(data.shape[0]))
         am = annulus.to_mask(method='center') # ApertureMask object
@@ -343,8 +362,47 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
     return fig
     
 def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens',
-                  flatfile=None, darkfile=None, 
+                  darkfile=None, flatfile=None,
                   swap_axes = None, figsize=(9,6)):
+    '''
+    Display and inspect an image stored in a FITS file.
+
+    The sky coordinates of the pixels will be displaced for images that
+    contain a valid WCS coordinate transformation in the image header.
+
+    If a dark frame is specified then this will be subtracted from the image
+    before it is displayed.
+
+    If a flat-field frame is specified then the image (after dark subtraction)
+    will be divided by this calibation image before being displayed.
+
+    Image pixel values are displayed using a linear scale between the lower
+    and upper values pmin and pmax, specified as percentiles of the pixel
+    values in the image, e.g. "pmin=10, pmax=80" will set the lower limit such
+    that 10% of the image values are below the lower limit and 20% of the
+    image values are above the upper limit. 
+
+    The option swap_axes is used to swap which axis is used to label the Right
+    Ascension and Declination grid values for images that have valid WCS
+    information.
+
+    :param fitsfile: FITS image to be displayed
+
+    :param pmin: lower percentile value for image scaling
+
+    :param pmin: upper percentile value for image scaling
+
+    :param cmap: name of matplotlib color map to use for display
+
+    :param darkfile: name of fits file contain dark frame 
+
+    :param flatfile: name of fits file contain flat frame 
+
+    :param swap_axes: swap labelling of R.A. and Dec. axes
+
+    :param figsize: figure size (inches)
+
+    '''
     class myWCSAxes(WCSAxes):
         def _display_world_coords(self, x, y):
             if not self._drawn:
@@ -373,7 +431,9 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens',
         flat = fits.getdata(flatfile)
         data /= flat
 
-    wcs = WCS(hdr)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore",FITSFixedWarning)
+        wcs = WCS(hdr)
     if wcs.has_celestial:
         ax = myWCSAxes(fig, [0.1,0.1,0.8,0.8], wcs=wcs)
         img = ax.imshow(data,

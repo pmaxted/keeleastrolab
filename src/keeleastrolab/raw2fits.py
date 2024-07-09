@@ -515,7 +515,7 @@ def main():
         help='Position hint for astrometry solver')
 
     parser.add_argument('-r', '--radius', default=10., type=float,
-        help='Search radius around position hint (degrees)')
+        help='Search radius around position hint in degrees (default 10)')
 
     parser.add_argument('-v', '--verbose', default=2, type=int, 
         choices = [0,1,2,3],
