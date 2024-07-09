@@ -50,9 +50,9 @@ def aperture_photometry(data, x, y, error=None, box_size=11,
     deviation of the pixels in the annulus. 
 
      The standard error on the flux measurement is computed if the standard
-     error on each input pixel is provided in the input array "error". This
-     includes the uncertainty on the local background level computed from the
-     standard error on the mean for non-rejected pixels in each annulus.
+    error on each input pixel is provided in the input array "error". This
+    includes the uncertainty on the local background level computed from the
+    standard error on the mean for non-rejected pixels in each annulus.
 
     :param data: image with point sources
 
@@ -73,6 +73,24 @@ def aperture_photometry(data, x, y, error=None, box_size=11,
     :bkg_reject_tol: Tolerance to reject pixels for local background estimate.
 
     :returns: An astropy.table table of the photometry and other information.
+
+    The results table contains the following columns
+
+    - id: aperture number
+    - x: x pixel coordinate at centre of aperture 
+    - y: y pixel coordinate at centre of aperture 
+    - flux: sum of pixel values above local background in aperture
+    - flux_err: standard error estimate for flux
+    - peak: maximum pixel value in the aperture
+    - bkg_mean: mean of the pixel values in annulus after outlier rejection
+    - bkg_sem: standard error estimate for bkg_mean
+    - bkg_n: number of pixels in annulus used to estimate bkg_mean
+    - bkg_med: median of the pixel values in the annulus
+    - bkg_mad: mean absolute deviation of pixel values in the annulus
+    - aperture_sum: sum of pixel values in aperture
+    - aperture_sum_err: standard error estimate for aperture_sum
+    - bkg_total: sum of pixel values in aperture after outlier rejection
+    - bkg_total_err: standard error estimate for bkg_total
 
     :Example:
 
@@ -121,7 +139,7 @@ def aperture_photometry(data, x, y, error=None, box_size=11,
         bkg_sem.append(an_sem)
         bkg_n.append(n)
 
-    d = [x,y,peak,bkg_mean,bkg_sem,bkg_n,bkg_med,bkg_mad]
+    d = [xcen,ycen,peak,bkg_mean,bkg_sem,bkg_n,bkg_med,bkg_mad]
     n = ['x','y','peak','bkg_mean','bkg_sem','bkg_n','bkg_med','bkg_mad']
     results = Table(d,names=n)
     phot_table = AperturePhotometry(data, apertures, error=error)
