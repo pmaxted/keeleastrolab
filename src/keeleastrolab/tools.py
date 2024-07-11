@@ -371,7 +371,7 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
     return fig
     
 def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens',
-                  darkfile=None, flatfile=None,
+                  darkfile=None, flatfile=None,vmin=None,vmax=None,
                   swap_axes = None, figsize=(9,6)):
     '''
     Display and inspect an image stored in a FITS file.
