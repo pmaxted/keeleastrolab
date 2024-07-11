@@ -483,7 +483,7 @@ def main():
                         dest='overwrite', const=True, default=False,
         help='Overwrite existing FITS files')
 
-    parser.add_argument('-b', '--binning', default=1, type=int, dest='N',
+    parser.add_argument('-b', '--binning', default=2, type=int, dest='N',
         help='''
         Combine output pixels in NxN blocks
         (default: %(default)d)

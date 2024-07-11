@@ -262,7 +262,7 @@ def list_camera_database(return_dict=False):
             return t
 
 def inspect_aperture(aperture_id, data, results_table, figsize=None, 
-                     vertical=False,  margin=3, 
+                     vertical=False,  margin=3, vmin=None, vmax=None,
                      pmin=50, pmax=99, cmap='Greens', title=None):
     """ 
     Diagnostic plot for an aperture used for aperture_photometry 
@@ -276,6 +276,11 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
     measure the local background level. The mean value is indicated by a
     vertical line and the limits used to reject pixels from the calculation
     are shown with dashed lines. 
+
+    The lower and upper limits for the scaling of the data values to color map
+    values can either by set using vmin and vmax to set the values directly,
+    or using pmin and pmax to set the values as a percentage of the full data
+    range in the image. If both are specified then vmin,vmax are used. 
 
     :param aperture_id: aperture to plot (from id column of results_table)
 
@@ -320,9 +325,13 @@ def inspect_aperture(aperture_id, data, results_table, figsize=None,
     else:
         fig,axes = plt.subplots(ncols=2, figsize=fs)
 
-    img = axes[0].imshow(data,
-                         vmin=np.percentile(data,pmin),
-                         vmax=np.percentile(data,pmax),
+    if vmin is None:
+        vmin = np.percentile(data,pmin)
+    
+    if vmax is None:
+        vmax = np.percentile(data,pmax)
+    
+    img = axes[0].imshow(data, vmin=vmin, vmax=vmax,
                          origin='lower',cmap=cmap)
     aperture.plot(ax=axes[0],color='r', lw=2)
     annulus.plot(ax=axes[0],color='b', lw=2)
@@ -376,11 +385,10 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens',
     If a flat-field frame is specified then the image (after dark subtraction)
     will be divided by this calibation image before being displayed.
 
-    Image pixel values are displayed using a linear scale between the lower
-    and upper values pmin and pmax, specified as percentiles of the pixel
-    values in the image, e.g. "pmin=10, pmax=80" will set the lower limit such
-    that 10% of the image values are below the lower limit and 20% of the
-    image values are above the upper limit. 
+    The lower and upper limits for the scaling of the data values to color map
+    values can either by set using vmin and vmax to set the values directly,
+    or using pmin and pmax to set the values as a percentage of the full data
+    range in the image. If both are specified then vmin,vmax are used. 
 
     The option swap_axes is used to swap which axis is used to label the Right
     Ascension and Declination grid values for images that have valid WCS
@@ -390,7 +398,11 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens',
 
     :param pmin: lower percentile value for image scaling
 
-    :param pmin: upper percentile value for image scaling
+    :param pmax: upper percentile value for image scaling
+
+    :param vmin: lower data value for image scaling
+
+    :param vmax: upper data value for image scaling
 
     :param cmap: name of matplotlib color map to use for display
 
@@ -411,8 +423,10 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens',
             coords = self._all_coords[self._display_coords_index]
             world = coords._transform.transform(np.array([pixel]))[0]
             c=SkyCoord(world[0],world[1],unit='degree') 
-            r=c.ra.to_string(unit='hour',fields=2,pad=True,format='unicode')
-            d=c.dec.to_string(fields=2,pad=True,alwayssign=True,format='unicode')
+            r=c.ra.to_string(unit='hour',fields=2,pad=True,
+                             format='unicode')
+            d=c.dec.to_string(fields=2,pad=True,alwayssign=True,
+                              format='unicode')
             return f"{r}, {d} ({x:6.1f}, {y:6.1f})"
 
     def format_cursor_data(self,data):
@@ -431,14 +445,18 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens',
         flat = fits.getdata(flatfile)
         data /= flat
 
+    if vmin is None:
+        vmin = np.percentile(data,pmin)
+    
+    if vmax is None:
+        vmax = np.percentile(data,pmax)
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore",FITSFixedWarning)
         wcs = WCS(hdr)
     if wcs.has_celestial:
         ax = myWCSAxes(fig, [0.1,0.1,0.8,0.8], wcs=wcs)
-        img = ax.imshow(data,
-            vmin=np.percentile(data,pmin),
-            vmax=np.percentile(data,pmax),
+        img = ax.imshow(data, vmin=vmin, vmax=vmax,
             origin='lower',cmap=cmap)
         lon = ax.coords[0]
         lat = ax.coords[1]
@@ -465,9 +483,7 @@ def inspect_image(fitsfile, pmin=90, pmax=99.9, cmap='Greens',
         fig.tight_layout()
         fig.add_axes(ax);  # axes have to be explicitly added to the figure
     else:
-        plt.imshow(data,
-                vmin=np.percentile(data,pmin),
-                vmax=np.percentile(data,pmax),
+        plt.imshow(data, vmin=vmin, vmax=vmax,
                 origin='lower',cmap=cmap)
         plt.xlabel('Column')
         plt.ylabel('Row')
