@@ -157,7 +157,8 @@ def aperture_photometry(data, x, y, error=None, box_size=11,
         results['bkg_total_err'] = bkg_total_err
         flux_err = np.hypot(phot_table['aperture_sum_err'],bkg_total_err)
         results.add_column(flux_err, index=4,name='flux_err')
-        for col in ['flux_err', 'bkg_total_err','aperture_sum_err']:
+        for col in ['flux_err', 'bkg_total_err','aperture_sum_err', 
+                    'bkg_med', 'bkg_mad']:
             results[col].info.format = '%.2f'
 
     for col in ['x','y','flux','peak','bkg_mean','bkg_sem','bkg_total',
