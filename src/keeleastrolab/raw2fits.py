@@ -12,7 +12,6 @@ Functions
 
 import argparse
 import rawpy
-import exifread
 from astropy.io import fits
 import astrometry
 import textwrap
@@ -23,6 +22,7 @@ from contextlib import contextmanager
 import tempfile
 from astropy.time import Time
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz
+from astropy.coordinates.errors import UnknownSiteException
 from photutils.detection import DAOStarFinder
 from . import tools
 import numpy as np
@@ -69,13 +69,6 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
              object_name=None,
              position_hint=None, radius_deg=15):
 
-    def get_rational(rational_string):
-        split = rational_string.split('/')
-        if len(split) == 1:
-            return int(split[0])
-        else:
-            return float(split[0])/float(split[1])
-
     data,exif = tools.read_raw(file, channel)
     if verbose > 2: print(f'\nRead file {file}')
 
@@ -107,7 +100,11 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
 
     hdr['SITENAME'] = site
     hdr['SITEELEV'] = elev
-    obssite = EarthLocation.of_address(site)
+    try:
+        obssite = EarthLocation.of_site(site)
+    except UnknownSiteException:
+        obssite = EarthLocation.of_address(site)
+
     latstr = obssite.lat.to_string(sep=' ',precision=0)
     hdr['LATITUDE'] = latstr
     lonstr = obssite.lon.to_string(sep=' ',precision=0,alwayssign=True)
@@ -120,10 +117,10 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
 
     flnm = os.path.splitext(os.path.split(file)[1])[0]
     txt = f'{flnm:12.12s} '
-    if 'Image DateTime' in exif:
-        dstr,tstr = str(exif['Image DateTime']).split()
+    if 'Exif.Image.DateTime' in exif:
+        dstr,tstr = str(exif['Exif.Image.DateTime']).split()
         if verbose > 2:
-            print(f'  Found "Image DateTime" EXIF tag: {dstr} {tstr}')
+            print(f'  Found "Exif.Image.DateTime" EXIF tag: {dstr} {tstr}')
         dateobs = dstr.replace(':','-')+'T'+tstr
         hdr['DATE-OBS'] = dateobs
         obstime = Time(dateobs)
@@ -132,8 +129,8 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
         if verbose > 2:
             print(f'  Julian Date at start of exposure = {jd:0.5f}')
         hdr['JD_SOBS']=round(jd,5),'Julian Date at start of exposure'
-        if 'EXIF ExposureTime' in exif:
-            jd += get_rational(str(exif['EXIF ExposureTime']))/86400/2
+        if 'Exif.Photo.ExposureTime' in exif:
+            jd += exif['Exif.Photo.ExposureTime'].toFloat()/86400/2
             hdr['JD']=round(jd,5),'Julian Date (UTC) at mid-exposure'
             if verbose > 2:
                 print(f'  Julian Date (UTC) at mid-exposure = {jd:0.5f}')
@@ -149,27 +146,30 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
     if object_name is not None:
         hdr['OBJECT'] = object_name,'From astrometry position hint'
 
-    d = {'EXPTIME':'EXIF ExposureTime',
-         'FNUMBER':'EXIF FNumber',
-         'ISO':'EXIF ISOSpeedRatings',
-         'FOCALLEN':'EXIF FocalLength'}
+    d = {'EXPTIME':'Exif.Photo.ExposureTime',
+         'FNUMBER':'Exif.Photo.FNumber',
+         'ISO':'Exif.Photo.ISOSpeedRatings',
+         'FOCALLEN':'Exif.Photo.FocalLength'}
     for k in d:
         tag = d[k]
         if tag in exif:
             s = str(exif[tag])
             if verbose > 2: print(f'  Found "{tag}" : {s}')
-            v = get_rational(s)
-            hdr[k] = v, tag
             if k == "EXPTIME":
+                v = np.round(exif[tag].toFloat(),5) 
                 txt += f'{s:>7.7}'
             elif k == 'FNUMBER':
+                v = np.round(exif[tag].toFloat(),1) 
                 txt += f'{v:5.1f}'
             elif k == "ISO":
+                v = exif[tag].toInt64()
                 txt += f'{s:>5.5}'
             elif k == "FOCALLEN":
-                txt += f'{s:>5.5}'
+                v = exif[tag].toInt64()
+                txt += f'{v:>5.0f}'
             else:
                 txt += f'{s:>8.8}'
+            hdr[k] = v, tag
         else:
             if k == "EXPTIME":
                 txt += f'       '
@@ -182,11 +182,11 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
             else:
                 txt += '        '
     
-    d = {'MAKE':'Image Make',
-         'MODEL':'Image Model',
-         'LENSNAME':'EXIF LensModel',
-         'SNUMBODY': 'EXIF BodySerialNumber',
-         'SNUMLENS': 'EXIF LensSerialNumber'}
+    d = {'MAKE':'Exif.Image.Make',
+         'MODEL':'Exif.Image.Model',
+         'LENSNAME':'Exif.Photo.LensModel',
+         'SNUMBODY': 'Exif.Photo.BodySerialNumber',
+         'SNUMLENS': 'Exif.Photo.LensSerialNumber'}
     for k in d:
         tag = d[k]
         try:
@@ -199,10 +199,10 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
         else:
             hdr[k] = s, tag
 
-    if ("Image Make" in exif) & ("Image Model" in exif):
+    if ("Exif.Image.Make" in exif) & ("Exif.Image.Model" in exif):
         db = tools.list_camera_database(return_dict=True)
-        make = str(exif["Image Make"]).strip()
-        model = str(exif["Image Model"]).strip()
+        make = str(exif["Exif.Image.Make"]).strip()
+        model = str(exif["Exif.Image.Model"]).strip()
         key = f'{make}_{model}'.replace(' ','_')
         if verbose > 2: print(f'  Found "Image Make" EXIF tag: {make}')
         if verbose > 2: print(f'  Found "Image Model" EXIF tag: {model}')
@@ -242,8 +242,8 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
         print(f'  Image median = {np.median(data):0.0f}')
         print(f'  Image median abs. dev. = {medabsdev:0.1f}')
 
-    if xpixsz is not None and 'EXIF FocalLength' in exif:
-        fl = get_rational(str(exif['EXIF FocalLength']))
+    if xpixsz is not None and 'Exif.Photo.FocalLength' in exif:
+        fl = exif['Exif.Photo.FocalLength'].toFloat()
         wim = data.shape[1]*3.43775*xpixsz/fl  # image width, arcmin 
         him = data.shape[0]*3.43775*ypixsz/fl  # image height, arcmin 
         if verbose > 2:
@@ -362,7 +362,7 @@ def raw2fits(file, wcs=True, channel='G', N=1, verbose=1,
     elif wcs and (verbose > 2):
         if xpixsz is None:
             print('  WCS not attempted - pixel size information missing')
-        if 'EXIF FocalLength' not in exif:
+        if 'Exif.Photo.FocalLength' not in exif:
             print('  WCS not attempted - EXIF FocalLength tag missing') 
 
     fitsfile = os.path.splitext(file)[0]+extension
@@ -391,18 +391,18 @@ def main():
         Missing EXIF tags are not written and no error is reported in this
         case. 
 
-         EXIF                    FITS      Notes   
-         -------------------------------------------------------------------- 
-         "Image DateTime"        DATE-OBS  ISO 8601 format
-         "Image Make"            MAKE      Truncated to 68 characters
-         "Image Model"           MODEL     Truncated to 68 characters
-         "EXIF ExposureTime"     EXPTIME   seconds
-         "EXIF FNumber"          FNUMBER   
-         "EXIF ISOSpeedRatings"  ISO       
-         "EXIF FocalLength"      FOCALLEN  mm
-         "EXIF LensModel"        LENSNAME  Truncated to 68 characters
-         "EXIF BodySerialNumber" SNUMBODY  
-         "EXIF LensSerialNumber" SNUMLENS 
+         EXIF                     FITS      Notes   
+         --------------------------------------------------------------------- 
+         "Image.DateTime"         DATE-OBS  ISO 8601 format
+         "Image.Make"             MAKE      Truncated to 68 characters
+         "Image.Model"            MODEL     Truncated to 68 characters
+         "Photo.ExposureTime"     EXPTIME   seconds
+         "Photo.FNumber"          FNUMBER   
+         "Photo.ISOSpeedRatings"  ISO       
+         "Photo.FocalLength"      FOCALLEN  mm
+         "Photo.LensModel"        LENSNAME  Truncated to 68 characters
+         "Photo.BodySerialNumber" SNUMBODY  
+         "Photo.LensSerialNumber" SNUMLENS 
 
         If the --wcs option is used then the photutils routine DAOStarFinder
         is used to detect stars in the image and their positions are passed to

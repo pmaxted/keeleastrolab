@@ -21,7 +21,7 @@ from astropy.time import Time
 __all__ = ['stackfits']
 
 def stackfits(files, ext=0, stack_function='mean',  norm_func=None,
-              output='stack.fits', overwrite=False):
+              output='stack.fits', bias=0, overwrite=False):
     hduls = []
     for file in files:
         hdul = fits.open(file,memmap=True)
@@ -32,19 +32,19 @@ def stackfits(files, ext=0, stack_function='mean',  norm_func=None,
     if norm_func is None:
         nv = np.ones(len(hduls))
     elif norm_func == 'mean':
-        nv = [np.mean(h[ext].data) for h in hduls]
+        nv = [np.mean(h[ext].data-bias) for h in hduls]
     elif norm_func == 'median':
-        nv = [np.median(h[ext].data) for h in hduls]
+        nv = [np.median(h[ext].data)-bias for h in hduls]
     else:
         q = float(norm_func[1:])
-        nv = [np.percentile(h[ext].data, q) for h in hduls]
+        nv = [np.percentile(h[ext].data-bias, q) for h in hduls]
 
     if stack_function == 'mean':
-        stack = np.mean([h[ext].data/n for h,n in zip(hduls,nv)], axis=0)
+        stack = np.mean([(h[ext].data-bias)/n for h,n in zip(hduls,nv)], axis=0)
     elif stack_function == 'median':
-        stack = np.median([h[ext].data/n for h,n in zip(hduls,nv)], axis=0)
+        stack = np.median([(h[ext].data-bias)/n for h,n in zip(hduls,nv)], axis=0)
     elif stack_function == 'sum':
-        stack = np.sum([h[ext].data/n for h,n in zip(hduls,nv)], axis=0)
+        stack = np.sum([(h[ext].data-bias)/n for h,n in zip(hduls,nv)], axis=0)
     else:
         raise ValueError('Invalid stack_function')
     hdr = fits.PrimaryHDU().header
@@ -64,6 +64,12 @@ def stackfits(files, ext=0, stack_function='mean',  norm_func=None,
         hdr['DATE-OBS'] = t
     except KeyError:
         pass
+    hdr['HISTORY'] = f'Bias value subtracted from frames = {bias}'
+    hdr['HISTORY'] = f'No. of files stacked = {len(files)}'
+    hdr['HISTORY'] = f'Images combined with function {stack_function}'
+    if norm_func is not None:
+        hdr['HISTORY'] = f'Normalisation option {norm_func}'
+
     fits.writeto(output,stack,hdr,overwrite=overwrite)
 
 def main():
@@ -123,6 +129,11 @@ def main():
         Normalize images using the statistic specified (default: %(default)s)
         ''')
 
+    parser.add_argument('-b', '--bias', default=0, type=float, 
+        help='''
+        Bias value to subtract from all images before stacking.
+        ''')
+
     parser.add_argument('-o', '--overwrite', action='store_const',
                         dest='overwrite', const=True, default=False,
         help='Overwrite existing output FITS files')
@@ -134,6 +145,6 @@ def main():
         sys.exit(1)
 
     stackfits(args.files, ext=args.ext, stack_function=args.method,
-              norm_func=args.norm, output=args.fitsfile,
+              norm_func=args.norm, output=args.fitsfile, bias=args.bias,
               overwrite=args.overwrite)
 

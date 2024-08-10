@@ -9,7 +9,7 @@ tools
 
 import rawpy
 from rawpy import LibRawTooBigError
-import exifread
+import exiv2
 import errno
 import os
 import csv
@@ -182,7 +182,7 @@ def read_raw(file, channel='G'):
     If there two channels corresponding to the selected colour (typically for
     'G') then the two image data values are summed.
     
-    Return image data as a numpy array, an EXIF tags dictionary.
+    Return image data as a numpy array and the EXIF information as a dict
 
     :param file: full path to file containing raw image data.
 
@@ -213,12 +213,13 @@ def read_raw(file, channel='G'):
         raise FileNotFoundError(
                 errno.ENOENT, os.strerror(errno.ENOENT), file)
 
-    with open(file,'rb') as fp:
-        exif_info = exifread.process_file(fp, details=False)
-
+    image = exiv2.ImageFactory.open(file)
+    image.readMetadata()
+    data = image.exifData()
+    exif_info = {}
+    for datum in data:
+        exif_info[datum.key()] = datum.getValue()
     return image_data, exif_info
-
-
 
 def list_camera_database(return_dict=False):
     """
